@@ -1,0 +1,98 @@
+<parameterMap type="map" id="testParameterMap">  
+   <parameter property="addend1" jdbcType="INTEGER" mode="IN"/>  
+   <parameter property="addend2" jdbcType="INTEGER" mode="IN"/>  
+   <parameter property="sum" jdbcType="INTEGER" mode="OUT"/>  
+ </parameterMap>  
+<update id="adderWithParameterMap" parameterMap="testParameterMap" statementType="CALLABLE">  
+   {call sptest.adder(?, ?, ?)}  
+ </update> 
+
+SqlSession sqlSession = sqlSessionFactory.openSession();  
+       try {  
+           Map<String, Object> parms = new HashMap<String, Object>();  
+           parms.put("addend1", 3);  
+           parms.put("addend2", 4);  
+             
+           SPMapper spMapper = sqlSession.getMapper(SPMapper.class);  
+             
+           spMapper.adderWithParameterMap(parms);  
+           assertEquals(7, parms.get("sum"));  
+             
+           parms = new HashMap<String, Object>();  
+           parms.put("addend1", 2);  
+           parms.put("addend2", 3);  
+           spMapper.adderWithParameterMap(parms);  
+           assertEquals(5, parms.get("sum"));  
+             
+       } finally {  
+           sqlSession.close();  
+       }
+-------------------------------------------------------------------------------
+create procedure sptest.getnames(in lowestId int, out totalrows integer)  
+reads sql data  
+dynamic result sets 1  
+BEGIN ATOMIC  
+  declare cur cursor for select * from sptest.names where id >= lowestId;  
+  select count(*) into totalrows from sptest.names where id >= lowestId;  
+  open cur;  
+END
+
+<select id="getNamesAndItems" statementType="CALLABLE"  
+    <select id="getNames" parameterType="java.util.Map" statementType="CALLABLE"  
+  resultMap="nameResult">  
+  {call sptest.getnames(  
+    #{lowestId,jdbcType=INTEGER,mode=IN},  
+    #{totalRows,jdbcType=INTEGER,mode=OUT})}  
+</select>  
+</select>
+
+SqlSession sqlSession = sqlSessionFactory.openSession();  
+       try {  
+           SPMapper spMapper = sqlSession.getMapper(SPMapper.class);  
+             
+           Map<String, Object> parms = new HashMap<String, Object>();  
+           parms.put("lowestId", 1);  
+           List<Name> names = spMapper.getNamesAnnotated(parms);  
+           assertEquals(3, names.size());  
+           assertEquals(3, parms.get("totalRows"));  
+       } finally {  
+           sqlSession.close();  
+       } 
+-------------------------------------------------------------------------------------------
+create procedure sptest.getnamesanditems()  
+reads sql data  
+dynamic result sets 2  
+BEGIN ATOMIC  
+  declare cur1 cursor for select * from sptest.names;  
+  declare cur2 cursor for select * from sptest.items;  
+  open cur1;  
+  open cur2;  
+END
+
+<resultMap type="org.apache.ibatis.submitted.sptests.Name" id="nameResult">  
+    <result column="ID" property="id"/>  
+    <result column="FIRST_NAME" property="firstName"/>  
+    <result column="LAST_NAME" property="lastName"/>  
+  </resultMap>  
+  
+  <resultMap type="org.apache.ibatis.submitted.sptests.Item" id="itemResult">  
+    <result column="ID" property="id"/>  
+    <result column="ITEM" property="item"/>  
+  </resultMap>  
+  
+  <select id="getNamesAndItems" statementType="CALLABLE"  
+    resultMap="nameResult,itemResult">  
+    {call sptest.getnamesanditems()}  
+  </select>  
+
+SqlSession sqlSession = sqlSessionFactory.openSession();  
+        try {  
+            SPMapper spMapper = sqlSession.getMapper(SPMapper.class);  
+              
+            List<List<?>> results = spMapper.getNamesAndItems();  
+            assertEquals(2, results.size());  
+            assertEquals(4, results.get(0).size());  
+            assertEquals(3, results.get(1).size());  
+        } finally {  
+            sqlSession.close();  
+        }   

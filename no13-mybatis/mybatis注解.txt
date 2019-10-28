@@ -1,0 +1,397 @@
+使用mybatis，必须有个全局配置文件configuration.xml，来配置mybatis的缓存，延迟加载等等一系列属性，该配置文件示例如下：
+<?xml version="1.0" encoding="UTF-8" ?>   
+<!DOCTYPE configuration        
+    PUBLIC "-//ibatis.apache.org//DTD Config 3.0//EN"        
+    "http://ibatis.apache.org/dtd/ibatis-3-config.dtd">  
+<configuration>  
+    <settings>  
+                <!-- 全局映射器启用缓存 -->  
+        <setting name="cacheEnabled" value="true" />  
+                <!-- 查询时，关闭关联对象即时加载以提高性能 -->  
+        <setting name="lazyLoadingEnabled" value="true" />  
+                <!-- 设置关联对象加载的形态，此处为按需加载字段(加载字段由SQL指              定)，不会加载关联表的所有字段，以提高性能 -->  
+        <setting name="aggressiveLazyLoading" value="false" />  
+                <!-- 对于未知的SQL查询，允许返回不同的结果集以达到通用的效果 -->  
+        <setting name="multipleResultSetsEnabled" value="true" />  
+                <!-- 允许使用列标签代替列名 -->  
+        <setting name="useColumnLabel" value="true" />  
+                <!-- 允许使用自定义的主键值(比如由程序生成的UUID 32位编码作为键值)，数据表的PK生成策略将被覆盖 -->  
+        <setting name="useGeneratedKeys" value="true" />  
+                <!-- 给予被嵌套的resultMap以字段-属性的映射支持 -->  
+        <setting name="autoMappingBehavior" value="FULL" />  
+                <!-- 对于批量更新操作缓存SQL以提高性能  -->  
+        <setting name="defaultExecutorType" value="BATCH" />  
+                <!-- 数据库超过25000秒仍未响应则超时 -->  
+        <setting name="defaultStatementTimeout" value="25000" />  
+    </settings>  
+        <!-- 全局别名设置，在映射文件中只需写别名，而不必写出整个类路径  -->  
+    <typeAliases>  
+         <typeAlias alias="TestBean"  
+        type="com.wotao.taotao.persist.test.dataobject.TestBean" />  
+    </typeAliases>  
+        <!-- 非注解的sql映射文件配置，如果使用mybatis注解，该mapper无需配置，但是如果mybatis注解中包含@resultMap注解，则mapper必须配置，给resultMap注解使用 -->  
+    <mappers>  
+        <mapper resource="persist/test/orm/test.xml" />  
+    </mappers>  
+</configuration>  
+
+该文件放在资源文件的任意classpath目录下，假设这里就直接放在资源根目录，等会spring需要引用该文件。 
+
+查看ibatis-3-config.dtd发现除了settings和typeAliases还有其他众多元素，比如properties,objectFactory,environments等等，这些元素基本上都包含着一些环境配置，数据源定义，数据库事务等等，在单独使用mybatis的时候非常重要，比如通过以构造参数的形式去实例化一个sqlsessionFactory，就像这样：
+ 
+SqlSessionFactory factory = sqlSessionFactoryBuilder.build(reader);  
+SqlSessionFactory factory = sqlSessionFactoryBuilder.build(reader, properties);  
+SqlSessionFactory factory = sqlSessionFactoryBuilder.build(reader, environment, properties);  
+
+而typeHandlers则用来自定义映射规则，如你可以自定义将Character映射为varchar，plugins元素则放了一些拦截器接口，你可以继承他们并做一些切面的事情，至于每个元素的细节和使用，你参考mybatis用户指南即可。 
+
+现在我们用的是spring，因此除settings和typeAliases元素之外，其他元素将会失效，故不在此配置，spring会覆盖这些元素的配置，比如在spring配置文件中指定c3p0数据源定义如下：
+<!-- c3p0 connection pool configuration -->  
+    <bean id="testDataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"  
+        destroy-method="close">  
+                <!-- 数据库驱动 -->  
+        <property name="driverClass" value="${db.driver.class}" />  
+                <!-- 连接URL串 -->  
+        <property name="jdbcUrl" value="${db.url}" />  
+                <!-- 连接用户名 -->  
+        <property name="user" value="${db.username}" />  
+                <!-- 连接密码 -->  
+        <property name="password" value="${db.password}" />  
+                <!-- 初始化连接池时连接数量为5个 -->  
+        <property name="initialPoolSize" value="5" />  
+                <!-- 允许最小连接数量为5个 -->  
+        <property name="minPoolSize" value="5" />  
+                <!-- 允许最大连接数量为20个 -->  
+        <property name="maxPoolSize" value="20" />  
+                <!-- 允许连接池最大生成100个PreparedStatement对象 -->  
+        <property name="maxStatements" value="100" />  
+                <!-- 连接有效时间，连接超过3600秒未使用，则该连接丢弃 -->  
+        <property name="maxIdleTime" value="3600" />  
+                <!-- 连接用完时，一次产生的新连接步进值为2 -->  
+        <property name="acquireIncrement" value="2" />  
+                <!-- 获取连接失败后再尝试10次，再失败则返回DAOException异常 -->  
+        <property name="acquireRetryAttempts" value="10" />  
+                <!-- 获取下一次连接时最短间隔600毫秒，有助于提高性能 -->  
+        <property name="acquireRetryDelay" value="600" />  
+                <!-- 检查连接的有效性，此处小弟不是很懂什么意思 -->  
+        <property name="testConnectionOnCheckin" value="true" />  
+                <!-- 每个1200秒检查连接对象状态 -->  
+        <property name="idleConnectionTestPeriod" value="1200" />  
+                <!-- 获取新连接的超时时间为10000毫秒 -->  
+        <property name="checkoutTimeout" value="10000" />  
+    </bean>  
+
+配置中的${}都是占位符，在你指定数据库驱动打war时会自动替换，替换的值在你的父pom中配置，至于c3p0连接池的各种属性详细信息和用法，你自行参考c3p0的官方文档，这里要说明的是checkoutTimeout元素，记得千万要设大一点，单位是毫秒，假如设置太小，有可能会导致没等数据库响应就直接超时了，小弟在这里吃了不少苦头，还是基本功太差。 
+
+数据源配置妥当之后，我们就要开始非常重要的sessionFactory配置了，无论是hibernate还是mybatis，都需要一个sessionFactory来生成session，sessionFactory配置如下：
+<bean id="testSqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">  
+    <property name="configLocation" value="classpath:configuration.xml" />  
+    <property name="dataSource" ref="testDataSource" />  
+</bean>  
+
+testSqlSessionFactory有两处注入，一个就是前面提到的mybatis全局设置文件configuration.xml，另一个就是上面定义的数据源了（注：hibernate的sessionFactory只需注入hibernate.cfg.xml，数据源定义已经包含在该文件中），好了，sessionFactory已经产生了，由于我们用的mybatis3的注解，因此spring的sqlSessionTemplate也不用配置了，sqlSessionTemplate也不用注入到我们的BaseDAO中了，相应的，我们需要配置一个映射器接口来对应sqlSessionTemplate，该映射器接口定义了你自己的接口方法，具体实现不用关心，代码如下：
+<!-- data OR mapping interface -->  
+<bean id="testMapper" class="org.mybatis.spring.mapper.MapperFactoryBean">  
+    <property name="sqlSessionFactory" ref="testSqlSessionFactory" />  
+    <property name="mapperInterface" value="com.wotao.taotao.persist.test.mapper.TestMapper" />  
+</bean>  
+
+对应于sqlSessionTemplate，testMapper同样需要testSqlSessionFactory注入，另外一个注入就是你自己定义的Mapper接口，该接口定义了操作数据库的方法和SQL语句以及很多的注解，稍后我会讲到。到此，mybatis和spring整合的文件配置就算OK了（注：如果你需要开通spring对普通类的代理功能，那么你需要在spring配置文件中加入<aop:aspectj-autoproxy />），至于其他的如事务配置，AOP切面注解等内容不在本文范围内，不作累述。
+
+至此，一个完整的myabtis整合spring的配置文件看起来应该如下所示： 
+<?xml version="1.0" encoding="UTF-8"?>  
+<beans xmlns="http://www.springframework.org/schema/beans"  
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"  
+    xmlns:tx="http://www.springframework.org/schema/tx" xmlns:aop="http://www.springframework.org/schema/aop"  
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd   
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd   
+http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-2.5.xsd   
+http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-2.5.xsd">  
+  
+    <!-- c3p0 connection pool configuration -->  
+    <bean id="testDataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"  
+        destroy-method="close">  
+        <property name="driverClass" value="${db.driver.class}" />  
+        <property name="jdbcUrl" value="${db.url}" />  
+        <property name="user" value="${db.username}" />  
+        <property name="password" value="${db.password}" />  
+        <property name="initialPoolSize" value="5" />  
+        <property name="minPoolSize" value="5" />  
+        <property name="maxPoolSize" value="20" />  
+        <property name="maxStatements" value="100" />  
+        <property name="maxIdleTime" value="3600" />  
+        <property name="acquireIncrement" value="2" />  
+        <property name="acquireRetryAttempts" value="10" />  
+        <property name="acquireRetryDelay" value="600" />  
+        <property name="testConnectionOnCheckin" value="true" />  
+        <property name="idleConnectionTestPeriod" value="1200" />  
+        <property name="checkoutTimeout" value="10000" />  
+    </bean>  
+    <bean id="testSqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">  
+        <property name="configLocation" value="classpath:configuration.xml" />  
+        <property name="dataSource" ref="testDataSource" />  
+    </bean>  
+    <!-- data OR mapping interface -->  
+    <bean id="testMapper" class="org.mybatis.spring.mapper.MapperFactoryBean">  
+        <property name="sqlSessionFactory" ref="testSqlSessionFactory" />  
+        <property name="mapperInterface" value="com.wotao.taotao.persist.test.mapper.TestMapper" />  
+    </bean>  
+  
+    <!-- add your own Mapper here -->  
+  
+    <!-- comment here, using annotation -->  
+    <!-- <bean id="sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate"> -->  
+    <!-- <constructor-arg index="0" ref="sqlSessionFactory" /> -->  
+    <!-- </bean> -->  
+    <!-- base DAO class, for module business, extend this class in DAO -->  
+    <!-- <bean id="testBaseDAO" class="com.test.dao.TestBaseDAO"> -->  
+    <!-- <property name="sqlSessionTemplate" ref="sqlSessionTemplate" /> -->  
+    <!-- </bean> -->  
+    <!-- <bean id="testDAO" class="com.test.dao.impl.TestDAOImpl" /> -->  
+  
+    <!-- you can DI Bean if you don't like use annotation -->  
+  
+</beans>  
+
+
+到此为止，我们只讲了mybatis和spring的整合，还没有真正触及mybatis的核心：使用mybatis注解代替映射文件编程（不过官方文档也说了，如果真正想发挥mybatis功能，还是需要用到映射文件，看来myabtis自己都对mybatis注解没信心，呵呵），通过上述内容，我们知道配置搞定，但是testMapper还没有被实现，而注解的使用，全部集中在这个testMapper上，是mybatis注解的核心所在，先来看一下这个testMapper接口是个什么样的：
+/** 
+ * The test Mapper interface. 
+ *  
+ * @author HuangMin <a href="mailto:minhuang@hengtiansoft.com>send email</a> 
+ *  
+ * @since 1.6 
+ * @version 1.0 
+ *  
+ *          #~TestMapper.java 2011-9-23 : afternoon 10:51:40 
+ */  
+@CacheNamespace(size = 512)  
+public interface TestMapper {  
+  
+    /** 
+     * get test bean by UID. 
+     *  
+     * @param id 
+     * @return 
+     */  
+    @SelectProvider(type = TestSqlProvider.class, method = "getSql")  
+    @Options(useCache = true, flushCache = false, timeout = 10000)  
+    @Results(value = {  
+            @Result(id = true, property = "id", column = "test_id", javaType = String.class, jdbcType = JdbcType.VARCHAR),  
+            @Result(property = "testText", column = "test_text", javaType = String.class, jdbcType = JdbcType.VARCHAR) })  
+    public TestBean get(@Param("id") String id);  
+  
+    /** 
+     * get all tests. 
+     *  
+     * @return 
+     */  
+    @SelectProvider(type = TestSqlProvider.class, method = "getAllSql")  
+    @Options(useCache = true, flushCache = false, timeout = 10000)  
+    @Results(value = {  
+            @Result(id = true, property = "id", column = "test_id", javaType = String.class, jdbcType = JdbcType.VARCHAR),  
+            @Result(property = "testText", column = "test_text", javaType = String.class, jdbcType = JdbcType.VARCHAR) })  
+    public List<TestBean> getAll();  
+  
+    /** 
+     * get tests by test text. 
+     *  
+     * @param testText 
+     * @return 
+     */  
+    @SelectProvider(type = TestSqlProvider.class, method = "getByTestTextSql")  
+    @Options(useCache = true, flushCache = false, timeout = 10000)  
+    @ResultMap(value = "getByTestText")  
+    public List<TestBean> getByTestText(@Param("testText") String testText);  
+  
+    /** 
+     * insert a test bean into database. 
+     *  
+     * @param testBean 
+     */  
+    @InsertProvider(type = TestSqlProvider.class, method = "insertSql")  
+    @Options(flushCache = true, timeout = 20000)  
+    public void insert(@Param("testBean") TestBean testBean);  
+  
+    /** 
+     * update a test bean with database. 
+     *  
+     * @param testBean 
+     */  
+    @UpdateProvider(type = TestSqlProvider.class, method = "updateSql")  
+    @Options(flushCache = true, timeout = 20000)  
+    public void update(@Param("testBean") TestBean testBean);  
+  
+    /** 
+     * delete a test by UID. 
+     *  
+     * @param id 
+     */  
+    @DeleteProvider(type = TestSqlProvider.class, method = "deleteSql")  
+    @Options(flushCache = true, timeout = 20000)  
+    public void delete(@Param("id") String id);  
+}  
+
+下面逐个对里面的注解进行分析： 
+@CacheNamespace(size = 512) ： 定义在该命名空间内允许使用内置缓存，最大值为512个对象引用，读写默认是开启的，缓存内省刷新时间为默认3600000毫秒，写策略是拷贝整个对象镜像到全新堆（如同CopyOnWriteList）因此线程安全。 
+
+@SelectProvider(type = TestSqlProvider.class, method = "getSql") ： 提供查询的SQL语句，如果你不用这个注解，你也可以直接使用@Select("select * from ....")注解，把查询SQL抽取到一个类里面，方便管理，同时复杂的SQL也容易操作，type = TestSqlProvider.class就是存放SQL语句的类，而method = "getSql"表示get接口方法需要到TestSqlProvider类的getSql方法中获取SQL语句。 
+
+@Options(useCache = true, flushCache = false, timeout = 10000) ： 一些查询的选项开关，比如useCache = true表示本次查询结果被缓存以提高下次查询速度，flushCache = false表示下次查询时不刷新缓存，timeout = 10000表示查询结果缓存10000秒。 
+
+@Results(value = { 
+@Result(id = true, property = "id", column = "test_id", javaType = String.class, jdbcType = JdbcType.VARCHAR), 
+@Result(property = "testText", column = "test_text", javaType = String.class, jdbcType = JdbcType.VARCHAR) }) ： 表示sql查询返回的结果集，@Results是以@Result为元素的数组，@Result表示单条属性-字段的映射关系，如：@Result(id = true, property = "id", column = "test_id", javaType = String.class, jdbcType = JdbcType.VARCHAR)可以简写为：@Result(id = true, property = "id", column = "test_id")，id = true表示这个test_id字段是个PK，查询时mybatis会给予必要的优化，应该说数组中所有的@Result组成了单个记录的映射关系，而@Results则单个记录的集合。另外还有一个非常重要的注解@ResultMap也和@Results差不多，到时会讲到。 
+
+@Param("id") ：全局限定别名，定义查询参数在sql语句中的位置不再是顺序下标0,1,2,3....的形式，而是对应名称，该名称就在这里定义。 
+
+@ResultMap(value = "getByTestText") ：重要的注解，可以解决复杂的映射关系，包括resultMap嵌套，鉴别器discriminator等等。注意一旦你启用该注解，你将不得不在你的映射文件中配置你的resultMap，而value = "getByTestText"即为映射文件中的resultMap ID(注意此处的value = "getByTestText"，必须是在映射文件中指定命名空间路径)。@ResultMap在某些简单场合可以用@Results代替，但是复杂查询，比如联合、嵌套查询@ResultMap就会显得解耦方便更容易管理。 
+一个映射文件如下所示：
+<?xml version="1.0" encoding="UTF-8" ?>    
+<!DOCTYPE mapper    
+PUBLIC "-//ibatis.apache.org//DTD Mapper 3.0//EN"    
+"http://ibatis.apache.org/dtd/ibatis-3-mapper.dtd">  
+  
+<mapper namespace="com.wotao.taotao.persist.test.mapper.TestMapper">  
+    <resultMap id="getByTestText" type="TestBean">  
+        <id property="id" column="test_id" javaType="string" jdbcType="VARCHAR" />  
+        <result property="testText" column="test_text" javaType="string" jdbcType="VARCHAR" />  
+    </resultMap>  
+</mapper>  
+
+注意文件中的namespace路径必须是使用@resultMap的类路径，此处是TestMapper，文件中 id="getByTestText"必须和@resultMap中的value = "getByTestText"保持一致。 
+
+@InsertProvider(type = TestSqlProvider.class, method = "insertSql") ：用法和含义@SelectProvider一样，只不过是用来插入数据库而用的。 
+
+@Options(flushCache = true, timeout = 20000) ：对于需要更新数据库的操作，需要重新刷新缓存flushCache = true使缓存同步。 
+
+@UpdateProvider(type = TestSqlProvider.class, method = "updateSql") ：用法和含义@SelectProvider一样，只不过是用来更新数据库而用的。 
+
+@Param("testBean") ：是一个自定义的对象，指定了sql语句中的表现形式，如果要在sql中引用对象里面的属性，只要使用testBean.id，testBean.textText即可，mybatis会通过反射找到这些属性值。 
+
+@DeleteProvider(type = TestSqlProvider.class, method = "deleteSql") ：用法和含义@SelectProvider一样，只不过是用来删除数据而用的。 
+
+现在mybatis注解基本已经讲完了，接下来我们就要开始写SQL语句了，因为我们不再使用映射文件编写SQL，那么就不得不在java类里面写，就像上面提到的，我们不得不在TestSqlProvider这个类里面写SQL，虽然已经把所有sql语句集中到了一个类里面去管理，但听起来似乎仍然有点恶心，幸好mybatis提供SelectBuilder和SqlBuilder这2个小工具来帮助我们生成SQL语句，SelectBuilder专门用来生成select语句，而SqlBuilder则是一般性的工具，可以生成任何SQL语句，我这里选择了SqlBuilder来生成，TestSqlProvider代码如下：
+/* 
+ * #~ test-afternoon10:51:40  
+ */  
+package com.wotao.taotao.persist.test.sqlprovider;  
+  
+import static org.apache.ibatis.jdbc.SqlBuilder.BEGIN;  
+import static org.apache.ibatis.jdbc.SqlBuilder.FROM;  
+import static org.apache.ibatis.jdbc.SqlBuilder.SELECT;  
+import static org.apache.ibatis.jdbc.SqlBuilder.SQL;  
+import static org.apache.ibatis.jdbc.SqlBuilder.WHERE;  
+import static org.apache.ibatis.jdbc.SqlBuilder.DELETE_FROM;  
+import static org.apache.ibatis.jdbc.SqlBuilder.INSERT_INTO;  
+import static org.apache.ibatis.jdbc.SqlBuilder.SET;  
+import static org.apache.ibatis.jdbc.SqlBuilder.UPDATE;  
+import static org.apache.ibatis.jdbc.SqlBuilder.VALUES;  
+  
+import java.util.Map;  
+  
+/** 
+ * The test sql Provider,define the sql script for mapping. 
+ *  
+ * @author HuangMin <a href="mailto:minhuang@hengtiansoft.com>send email</a> 
+ *  
+ * @since 1.6 
+ * @version 1.0 
+ *  
+ *          #~TestSqlProvider.java 2011-9-23 : afternoon 10:51:40 
+ */  
+public class TestSqlProvider {  
+  
+    /** table name, here is test */  
+    private static final String TABLE_NAME = "test";  
+  
+    /** 
+     * get test by id sql script. 
+     *  
+     * @param parameters 
+     * @return 
+     */  
+    public String getSql(Map<String, Object> parameters) {  
+        String uid = (String) parameters.get("id");  
+        BEGIN();  
+        SELECT("test_id, test_text");  
+        FROM(TABLE_NAME);  
+        if (uid != null) {  
+            WHERE("test_id = #{id,javaType=string,jdbcType=VARCHAR}");  
+        }  
+        return SQL();  
+    }  
+  
+    /** 
+     * get all tests sql script. 
+     *  
+     * @return 
+     */  
+    public String getAllSql() {  
+        BEGIN();  
+        SELECT("test_id, test_text");  
+        FROM(TABLE_NAME);  
+        return SQL();  
+    }  
+  
+    /** 
+     * get test by test text sql script. 
+     *  
+     * @param parameters 
+     * @return 
+     */  
+    public String getByTestTextSql(Map<String, Object> parameters) {  
+        String tText = (String) parameters.get("testText");  
+        BEGIN();  
+        SELECT("test_id, test_text");  
+        FROM(TABLE_NAME);  
+        if (tText != null) {  
+            WHERE("test_text like #{testText,javaType=string,jdbcType=VARCHAR}");  
+        }  
+        return SQL();  
+    }  
+  
+    /** 
+     * insert a test sql script. 
+     *  
+     * @return 
+     */  
+    public String insertSql() {  
+        BEGIN();  
+        INSERT_INTO(TABLE_NAME);  
+        VALUES("test_id", "#{testBean.id,javaType=string,jdbcType=VARCHAR}");  
+        VALUES("test_text", "#{testBean.testText,javaType=string,jdbcType=VARCHAR}");  
+        return SQL();  
+    }  
+  
+    /** 
+     * update a test sql script. 
+     *  
+     * @return 
+     */  
+    public String updateSql() {  
+        BEGIN();  
+        UPDATE(TABLE_NAME);  
+        SET("test_text = #{testBean.testText,javaType=string,jdbcType=VARCHAR}");  
+        WHERE("test_id = #{testBean.id,javaType=string,jdbcType=VARCHAR}");  
+        return SQL();  
+    }  
+  
+    /** 
+     * delete a test sql script. 
+     *  
+     * @return 
+     */  
+    public String deleteSql() {  
+        BEGIN();  
+        DELETE_FROM(TABLE_NAME);  
+        WHERE("test_id = #{id,javaType=string,jdbcType=VARCHAR}");  
+        return SQL();  
+    }  
+}  
+
+BEGIN();表示刷新本地线程，某些变量为了线程安全，会先在本地存放变量，此处需要刷新。 
+SELECT，FROM，WHERE等等都是sqlbuilder定义的公用静态方法，用来组成你的sql字符串。如果你在testMapper中调用该方法的某个接口方法已经定义了参数@Param()，那么该方法的参数Map<String, Object> parameters即组装了@Param()定义的参数，比如testMapper接口方法中定义参数为@Param("testId"),@Param("testText")，那么parameters的形态就是：[key="testId",value=object1],[key="testText",value=object2]，如果接口方法没有定义@Param()，那么parameters的key就是参数的顺序小标：[key=0,value=object1],[key=1,value=object2]，SQL()将返回最终append结束的字符串，sql语句中的形如 
+#{id,javaType=string,jdbcType=VARCHAR}完全可简写为#{id}，我只是为了规整如此写而已。另外，对于复杂查询还有很多标签可用，比如：JOIN，INNER_JOIN，GROUP_BY，ORDER_BY等等，具体使用详情，你可以查看源码。 
+
+最后记得把你的Mapper接口注入到你的DAO类中，在DAO中引用Mapper接口方法即可。我在BaseDAO中的注解注入如下
